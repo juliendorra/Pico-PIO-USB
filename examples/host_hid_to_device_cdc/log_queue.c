@@ -7,7 +7,7 @@
 #include "tusb.h"
 
 #ifndef LOGQ_SIZE
-#define LOGQ_SIZE 2048 // adjust if you log a lot
+#define LOGQ_SIZE 4096 // adjust if you log a lot
 #endif
 
 static queue_t logq; // byte queue
@@ -46,26 +46,24 @@ int log_printf(const char *fmt, ...)
 // Call this from core0 regularly (same place you call tud_task())
 void log_flush_task(void)
 {
-    if (!tud_cdc_connected())
-    {
-        // Optionally clear the queue if not connected
+    if (!tud_mounted())
+    { // device in CONFIGURED state, independent of DTR
         return;
     }
 
-    // Pull bytes and write to CDC
     uint8_t ch;
     while (!queue_is_empty(&logq))
     {
         if (!queue_try_remove(&logq, &ch))
             break;
-        tud_cdc_write_char(ch);
 
-        // If close to full, flush to make room
-        if (tud_cdc_write_available() < 8)
+        // Try to push; if the IN endpoint is busy/NAKs, just stop and try next tick
+        if (tud_cdc_write_char(ch) == 0)
+            break;
+
+        if (tud_cdc_write_available() < 16)
         {
             tud_cdc_write_flush();
-            // Optional: small yield/delay
-            // tight_loop_contents();
         }
     }
     tud_cdc_write_flush();

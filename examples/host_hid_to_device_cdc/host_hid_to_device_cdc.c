@@ -79,7 +79,8 @@ void core1_main()
   // Configure PIO USB: Waveshare RP2350-USB-A pins: D+ = 12, D- = 13
   // Référence: https://files.waveshare.com/wiki/RP2350-USB-A/RP2350-USB-A.pdf
   pio_cfg.pinout = PIO_USB_PINOUT_DPDM; // DM = DP+1
-  pio_cfg.pin_dp = 12;                  // D+ at 12, D- is 13 (dp+1)
+  pio_cfg.pin_dp = 12;                  // D+ at 12, D- is 13 (dp+1) Waveshare RP2350-USB-A
+  pio_cfg.pin_dp = 16;                  // D+ at 12, D- is 13 (dp+1) Feather RP2040 with USB Type A Host
 
   // Pass config to TinyUSB host for rhport=1 BEFORE tuh_init()
   tuh_configure(1, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
@@ -104,12 +105,24 @@ int main(void)
 
   sleep_ms(10);
 
+  // --- IMPORTANT: bring up the Device CDC side first, before starting the host ---
+  // This avoids losing or "delaying" early host logs before the CDC IN endpoint is usable.
+  tud_init(0);
+
+  // Give the device a short chance to reach CONFIGURED before host traffic starts.
+  // We cap the wait at ~1000 ms so we don't hang forever if no USB host is attached.
+  uint32_t start_ms = to_ms_since_boot(get_absolute_time());
+  while (!tud_mounted() && (to_ms_since_boot(get_absolute_time()) - start_ms < 1000))
+  {
+    tud_task();       // progress USB device state machine
+    log_flush_task(); // flush anything already queued
+    sleep_ms(1);
+  }
+
+  // Now start the host on core1
   multicore_reset_core1();
   // all USB task run in core1
   multicore_launch_core1(core1_main);
-
-  // init device stack on native usb (roothub port0)
-  tud_init(0);
 
   while (true)
   {
