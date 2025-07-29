@@ -158,11 +158,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
   uint16_t vid, pid;
   tuh_vid_pid_get(dev_addr, &vid, &pid);
 
-  char tempbuf[256];
-  int count = sprintf(tempbuf, "[%04x:%04x][%u] HID Interface%u, Protocol = %s\r\n", vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
-
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  log_printf("[%04x:%04x][%u] HID Interface%u, Protocol = %s\r\n", vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
 
   // Receive report from boot keyboard & mouse only
   // tuh_hid_report_received_cb() will be invoked when report is available
@@ -170,7 +166,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
   {
     if (!tuh_hid_receive_report(dev_addr, instance))
     {
-      tud_cdc_write_str("Error: cannot request report\r\n");
+      log_printf("Error: cannot request report\r\n");
     }
   }
 }
@@ -178,10 +174,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
 // Invoked when device with hid interface is un-mounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
-  char tempbuf[256];
-  int count = sprintf(tempbuf, "[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  log_printf("[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
 }
 
 // look up new key in previous keys
@@ -201,7 +194,6 @@ static void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *re
 {
   (void)dev_addr;
   static hid_keyboard_report_t prev_report = {0, 0, {0}}; // previous report to check key released
-  bool flush = false;
 
   for (uint8_t i = 0; i < 6; i++)
   {
@@ -228,18 +220,13 @@ static void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *re
 
         if (ch)
         {
-          if (ch == '\n')
-            tud_cdc_write("\r", 1);
-          tud_cdc_write(&ch, 1);
-          flush = true;
+          // log_printf will add \r for \n
+          log_printf("%c", ch);
         }
       }
     }
     // TODO example skips key released
   }
-
-  if (flush)
-    tud_cdc_write_flush();
 
   prev_report = *report;
 }
@@ -253,11 +240,7 @@ static void process_mouse_report(uint8_t dev_addr, hid_mouse_report_t const *rep
   char m = report->buttons & MOUSE_BUTTON_MIDDLE ? 'M' : '-';
   char r = report->buttons & MOUSE_BUTTON_RIGHT ? 'R' : '-';
 
-  char tempbuf[32];
-  int count = sprintf(tempbuf, "[%u] %c%c%c %d %d %d\r\n", dev_addr, l, m, r, report->x, report->y, report->wheel);
-
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  log_printf("[%u] %c%c%c %d %d %d\r\n", dev_addr, l, m, r, report->x, report->y, report->wheel);
 }
 
 // Invoked when received report from device via interrupt endpoint
@@ -283,6 +266,6 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   // continue to request to receive report
   if (!tuh_hid_receive_report(dev_addr, instance))
   {
-    tud_cdc_write_str("Error: cannot request report\r\n");
+    log_printf("Error: cannot request report\r\n");
   }
 }
